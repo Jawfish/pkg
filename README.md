@@ -33,15 +33,12 @@ If the package manager encounters an error, `dnfzf` will display the error messa
 
 ## Options
 
-`dnfzf` is an opinionated tool with sane defaults that should work for most users. However, there are a couple of configuration options available as flags or environment variables:
+`dnfzf` is an opinionated tool with sane defaults that should work for most users. However, there are a couple of options available as flags:
 
-| Environment Variable | Flag | Description                         | Default                            |
-| -------------------- | ---- | ----------------------------------- | ---------------------------------- |
-| `DNFZF_NO_CONFIRM`   | `-y` | skip the confirmation prompt        | `false`                            |
-| `DNFZF_DNF`          | `-d` | the path to the `dnf` binary to use | `dnf5` if present, otherwise `dnf` |
-| `DNFZF_CACHE`        | `-c` | the path to the DNF cache database  | `/var/cache/dnf/packages.db`       |
-
-`DNFZF_DNF` can point to either `dnf` or `dnf5`. `dnfzf` will simply use the binary at the path provided. The executable at `DNFZF_DNF` will only be called with the `install` and `remove` arguments, and its output is not parsed by `dnfzf`, so technically any executable that matches the expected interface will work.
+| Flag | Description                         | Default                            |
+| ---- | ----------------------------------- | ---------------------------------- |
+| `-y` | skip the confirmation prompt        | `false`                            |
+| `-c` | the path to the DNF cache database  | `/var/cache/dnf/packages.db`       |
 
 ## Dependencies
 
