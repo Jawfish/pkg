@@ -64,7 +64,6 @@ func setFlags(noConfirm *bool, cachePath *string, verbose *bool) {
 	flag.BoolVar(verbose, "v", false, "show verbose output")
 
 	flag.Parse()
-
 }
 
 func main() {
