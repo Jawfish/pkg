@@ -3,8 +3,12 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
+
+	"github.com/ktr0731/go-fuzzyfinder"
 )
 
 func initLogger(verbose bool) {
@@ -83,5 +87,49 @@ func main() {
 	}
 
 	ensureValidArch()
+
+	arch, err := getArch()
+	if err != nil {
+		slog.Error("error getting architecture", "err", err)
+		os.Exit(1)
+	}
+
 	ensureCache(dnfBinary, cachePath)
+
+	filters := flag.Args()
+	filter := strings.Join(filters, " ")
+
+	installedPackages, err := getPackagesFromCache(cachePath, Installed, arch, filter)
+	if err != nil {
+		slog.Error("error getting available packages", "err", err)
+		os.Exit(1)
+	}
+
+	availablePackages, err := getPackagesFromCache(cachePath, Available, arch, filter)
+	if err != nil {
+		slog.Error("error getting available packages", "err", err)
+		os.Exit(1)
+	}
+
+	processedPackages := append(processPkgQuery(installedPackages, Installed), processPkgQuery(availablePackages, Available)...)
+
+	idx, err := fuzzyfinder.FindMulti(
+		processedPackages,
+		func(i int) string {
+			return processedPackages[i].Name
+		},
+		fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+			if i == -1 {
+				return ""
+			}
+			return fmt.Sprintf("Package: %s\nVersion: %s\nInstalled: %v",
+				processedPackages[i].Name,
+				processedPackages[i].Version,
+				processedPackages[i].Installed)
+		}))
+	if err != nil {
+		slog.Error("error finding package", "err", err)
+		os.Exit(1)
+	}
+	fmt.Printf("selected: %v\n", idx)
 }

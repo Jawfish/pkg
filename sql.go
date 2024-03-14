@@ -1,24 +1,18 @@
 package main
 
-// import (
-// 	"database/sql"
-// )
-
-// const availablePackagesQuery = "SELECT * FROM available"
-// const installedPackagesQuery = "SELECT * FROM installed"
-
-// func nothing() {
-// 	db, err := sql.Open("sqlite3", "file:packages.db?cache=shared")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	defer db.Close()
-// }
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
 
 	_ "github.com/mattn/go-sqlite3"
+)
+
+type PackageType string
+
+const (
+	Installed PackageType = "installed"
+	Available PackageType = "available"
 )
 
 // checkCache returns true if the dnf package database cache exists and is a valid
@@ -61,4 +55,40 @@ func ensureValidSchema(path string) error {
 
 	slog.Debug("cache has valid schema")
 	return nil
+}
+
+// getPackagesFromCache returns a list of packages from the dnf package database cache
+// at the given path, either installed or available packages, depending on the pkgType
+// argument.
+func getPackagesFromCache(path string, pkgType PackageType, sysArch string, filter string) ([]string, error) {
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		return nil, &ErrOpeningCacheDatabase{Err: err}
+	}
+	defer db.Close()
+
+	// select all packages that are installed or available for the current architecture
+	// and "noarch" packages (documentation, etc.)
+	query := fmt.Sprintf("SELECT pkg FROM %s WHERE (pkg LIKE '%%%s%%' OR pkg LIKE '%%.noarch') AND pkg LIKE '%%%s%%'", pkgType, sysArch, filter)
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, &ErrQueryFailed{Query: query, Err: err}
+	}
+	defer rows.Close()
+
+	var packages []string
+	for rows.Next() {
+		var pkg string
+		if err := rows.Scan(&pkg); err != nil {
+			return nil, &ErrScanFailed{Table: string(pkgType), Err: err}
+		}
+		packages = append(packages, pkg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, &ErrQueryFailed{Query: query, Err: err}
+	}
+
+	return packages, nil
 }
