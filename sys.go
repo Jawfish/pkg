@@ -68,15 +68,6 @@ func depsInstalled() (bool, error) {
 		return false, err
 	}
 
-	// TODO: prompt user to install fzf if fzf is not found but dnf/dnf5 is found
-	_, errFzf := exec.LookPath("fzf")
-	if errFzf != nil {
-		slog.Error("missing dependency", "dep", "fzf")
-		return false, &ErrMissingDep{Dep: "fzf"}
-	} else {
-		slog.Debug("fzf found")
-	}
-
 	slog.Info("all dependencies found")
 
 	return true, nil
