@@ -7,9 +7,7 @@ import (
 	"runtime"
 )
 
-// getArch returns Fedora's architecture string for the current system's architecture
-// which is used when querying the package database to ensure only viable packages are
-// returned.
+// getArch returns Fedora's architecture string for the current system's architecture.
 //
 // Since Fedora packages are only available for a limited number of architectures, this
 // function returns an error if Fedora packages are not available for the current
@@ -28,11 +26,10 @@ func getArch() (string, error) {
 	arch := runtime.GOARCH
 
 	if archMap[arch] == "" {
-		slog.Error("unsupported architecture", "goArch", arch)
 		return "", &ErrUnsupportedArch{Arch: arch}
-	} else {
-		slog.Info("found supported architecture", "goArch", arch, "fedoraArch", archMap[arch])
 	}
+
+	slog.Debug("found supported architecture", "goArch", arch, "fedoraArch", archMap[arch])
 
 	return archMap[arch], nil
 }
@@ -52,56 +49,50 @@ func getPackageManager() (string, error) {
 		slog.Debug("found dnf")
 		return "dnf", nil
 	} else {
-		slog.Error("no package manager found")
 		return "", &ErrPackageManagerNotFound{}
 	}
 }
 
-// depsInstalled checks if the required dependencies are installed: dnf/dnf5 and fzf.
-// If any dependencies are not installed, an error is returned.
-func depsInstalled() (bool, error) {
-	slog.Debug("checking for dependencies")
-
-	_, err := getPackageManager()
-	if err != nil {
-		slog.Error("error checking for package manager", "err", err)
-		return false, err
-	}
-
-	slog.Info("all dependencies found")
-
-	return true, nil
-}
-
-// cacheExists returns true if the dnf package database cache exists.
-func cacheExists() (bool, error) {
+// checkCache returns nil if the dnf package database cache exists and is a valid
+// package database with the expected schema, otherwise an error is returned.
+func checkCache(path string) error {
 	slog.Debug("checking if cache exists")
-	_, err := os.Stat("/var/cache/dnf/packages.db")
+	_, err := os.Stat(path)
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			slog.Info("cache does not exist")
-			return false, nil
+			slog.Warn("cache does not exist")
+			return &ErrCacheNotFound{Path: path}
 
 		} else {
 			slog.Error("error checking if cache exists", "err", err)
-			return false, err
+			return err
 		}
 	}
+	slog.Debug("cache found, checking schema")
 
-	slog.Info("cache found")
-	return true, nil
+	err = ensureValidSchema(path)
+	if err != nil {
+		slog.Error("error ensuring valid schema", "err", err)
+		return err
+	}
+
+	slog.Debug("cache has valid schema")
+
+	return nil
 }
 
 // generateCache updates the dnf package database cache using the dnf update --refresh
 // command.
-func generateCache() {
+func generateCache(dnfBinary string) error {
 	slog.Debug("generating cache")
-	out, err := exec.Command("dnf", "update", "--refresh").Output()
+	out, err := exec.Command(dnfBinary, "update", "--refresh").Output()
 
 	if err != nil {
 		slog.Error("error generating cache", "err", err)
+		return err
 	}
 
 	slog.Info("cache generated", "output", string(out))
+	return nil
 }
