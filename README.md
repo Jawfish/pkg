@@ -39,6 +39,7 @@ If the package manager encounters an error, `dnfzf` will display the error messa
 | ---- | ----------------------------------- | ---------------------------------- |
 | `-y` | skip the confirmation prompt        | `false`                            |
 | `-c` | the path to the DNF cache database  | `/var/cache/dnf/packages.db`       |
+| `-v` | toggle verbose output               | `false`                            |
 
 ## Dependencies
 
@@ -68,5 +69,4 @@ The following benchmarks were conducted using the `time` command with output dir
 
 ## Roadmap
 
-- [ ] handle conflicting packages
 - [ ] get package metadata directly from local cache instead of using `dnf -C info`
