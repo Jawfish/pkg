@@ -113,20 +113,42 @@ func main() {
 
 	processedPackages := append(processPkgQuery(installedPackages, Installed), processPkgQuery(availablePackages, Available)...)
 
+	type PackageError struct {
+		Package Package
+		Err     error
+	}
+
+	var errors []PackageError
+
 	idx, err := fuzzyfinder.FindMulti(
 		processedPackages,
 		func(i int) string {
-			return processedPackages[i].Name
+			name := processedPackages[i].Name
+
+			if processedPackages[i].Installed {
+				name += " (installed)"
+			}
+			return name
 		},
 		fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+			// if there aren't any packages, don't try to show a preview
 			if i == -1 {
 				return ""
 			}
-			return fmt.Sprintf("Package: %s\nVersion: %s\nInstalled: %v",
-				processedPackages[i].Name,
-				processedPackages[i].Version,
-				processedPackages[i].Installed)
+
+			md, err := getPackageMetadata(processedPackages[i], w)
+			if err != nil {
+				errors = append(errors, PackageError{Package: processedPackages[i], Err: err})
+				return ""
+			}
+
+			return md
 		}))
+
+	for _, pkgErr := range errors {
+		slog.Error("error getting package metadata", "package", pkgErr.Package.Name, "err", pkgErr.Err)
+	}
+
 	if err != nil {
 		slog.Error("error finding package", "err", err)
 		os.Exit(1)
