@@ -18,8 +18,8 @@ When multiple packages are selected and those packages have mixed states (e.g. s
 
 Since `dnfzf` relies on the local package cache being available and reasonably fresh, it will:
 
-- prompt the user to run `dnf makecache` if the cache is not found
-- prompt the user to run `dnf makecache` if the cache is older than a week
+- run `dnf makecache` if the cache is not found
+- run `dnf makecache` if the cache is older than a week
 - prompt the user to enable `dnf-makecache.timer` if it's available but not enabled
 
 If the package manager encounters an error, `dnfzf` will display the error message and exit with a non-zero status code.
@@ -27,8 +27,7 @@ If the package manager encounters an error, `dnfzf` will display the error messa
 ## Features
 
 - quickly discover packages, even if you don't know the exact name
-- mixed-state multi-select support for installing and removing multiple packages at once
-- preview package metadata without having to run a separate command
+- mixed-state multi-select to install and remove multiple packages at the same time
 - easily install specific versions of a package
 
 ## Options
@@ -59,14 +58,12 @@ That said, there are also speed improvements to be found from the application it
 
 The following benchmarks were conducted using the `time` command with output directed to `/dev/null`. Each operation was run five times, and the results were averaged. All `dnf` commands were run with the `-C` flag to force `dnf` to use the local cache.
 
+<!-- TODO: these are outdated -->
 | Operation                            | `dnf` | `dnfzf` | Improvement |
 | ------------------------------------ | ----- | ------- | ----------- |
 | Search for `kernel`                  | 0.98s | 0.011s  | 89x         |
 | List all packages                    | 1.38s | 0.013s  | 106x        |
-| Query `kernel-6.5.6-300.fc39.x86_64` | 0.74s | 0.002s  | 372x*       |
-
-*`dnfzf` will find the package, but displaying the metadata takes roughly the same amount of time as `dnf` because it's a separate operation that uses `dnf` under the hood. However, you don't have to wait for the metadata query to complete before interacting with the package list.
 
 ## Roadmap
 
-- [ ] get package metadata directly from local cache instead of using `dnf -C info`
+- [ ] get package metadata directly from local cache via libsolv
