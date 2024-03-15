@@ -86,7 +86,7 @@ func checkCache(path string) error {
 // command.
 func generateCache(dnfBinary string) error {
 	slog.Debug("generating cache")
-	out, err := exec.Command(dnfBinary, "update", "--refresh").Output()
+	out, err := exec.Command(dnfBinary, "makecache").Output()
 
 	if err != nil {
 		slog.Error("error generating cache", "err", err)
