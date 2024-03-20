@@ -1,4 +1,4 @@
-module github.com/Jawfish/dnfzf
+module dnfzf
 
 go 1.21.7
 

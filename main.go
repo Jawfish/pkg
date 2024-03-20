@@ -1,66 +1,15 @@
 package main
 
 import (
-	"errors"
+	"dnfzf/db"
+	"dnfzf/dnf"
+	"dnfzf/finder"
+	"dnfzf/sys"
 	"flag"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
-
-	"github.com/ktr0731/go-fuzzyfinder"
 )
-
-func initLogger(verbose bool) {
-	level := slog.LevelError
-
-	if verbose {
-		level = slog.LevelDebug
-	}
-
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: level,
-	}))
-
-	slog.SetDefault(logger)
-}
-
-func ensureValidArch() {
-	_, err := getArch()
-
-	if err != nil {
-		slog.Error("error checking architecture", "err", err)
-		os.Exit(1)
-	}
-}
-
-func ensureCache(dnfBinary string, path string) {
-	err := checkCache(path)
-	if err == nil {
-		return
-	}
-
-	var e *ErrCacheNotFound
-	if !errors.As(err, &e) {
-		slog.Error("error checking cache", "err", err)
-		os.Exit(1)
-	}
-
-	slog.Warn("cache not found, generating")
-	if err = generateCache(dnfBinary); err != nil {
-		slog.Error("error generating cache", "err", err)
-		os.Exit(1)
-	}
-
-	if err = checkCache(path); err != nil {
-		if errors.As(err, &e) {
-			slog.Error("cache still can't be found after generating. If you are using the -c flag, ensure the path matches the configuration for DNF.")
-		} else {
-			slog.Error("error checking cache", "err", err)
-		}
-		os.Exit(1)
-	}
-}
 
 func setFlags(noConfirm *bool, cachePath *string, verbose *bool) {
 	flag.BoolVar(noConfirm, "y", false, "skip the confirmation prompt")
@@ -78,80 +27,94 @@ func main() {
 	)
 	setFlags(&noConfirm, &cachePath, &verbose)
 
-	initLogger(verbose)
-
-	dnfBinary, err := getPackageManager()
-	if err != nil {
-		slog.Error("error getting package manager", "err", err)
-		os.Exit(1)
-	}
-
-	ensureValidArch()
-
-	arch, err := getArch()
-	if err != nil {
-		slog.Error("error getting architecture", "err", err)
-		os.Exit(1)
-	}
-
-	ensureCache(dnfBinary, cachePath)
-
 	filters := flag.Args()
 	filter := strings.Join(filters, " ")
 
-	installedPackages, err := getPackagesFromCache(cachePath, Installed, arch, filter)
+	initLogger(verbose)
+
+	dnfBinary, fzfBinary, escalationBinary, err := sys.GetBinaries()
 	if err != nil {
-		slog.Error("error getting available packages", "err", err)
+		slog.Error("error getting binary", "err", err)
 		os.Exit(1)
 	}
 
-	availablePackages, err := getPackagesFromCache(cachePath, Available, arch, filter)
+	pkgMgr := dnf.NewPackageManager(escalationBinary, dnfBinary)
+	pkgDb, err := db.NewPackageDatabase(cachePath)
+	finder := finder.NewFinder(fzfBinary)
+
 	if err != nil {
-		slog.Error("error getting available packages", "err", err)
-		os.Exit(1)
-	}
-
-	processedPackages := append(processPkgQuery(installedPackages, Installed), processPkgQuery(availablePackages, Available)...)
-
-	type PackageError struct {
-		Package Package
-		Err     error
-	}
-
-	var errors []PackageError
-
-	idx, err := fuzzyfinder.FindMulti(
-		processedPackages,
-		func(i int) string {
-			name := processedPackages[i].Name
-
-			if processedPackages[i].Installed {
-				name += " (installed)"
-			}
-			return name
-		},
-		fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
-			// if there aren't any packages, don't try to show a preview
-			if i == -1 {
-				return ""
-			}
-
-			md, err := getPackageMetadata(processedPackages[i], w)
+		// if the cache couldn't be validated, try to generate it
+		if _, ok := err.(*db.ErrCacheNotFound); ok {
+			err := pkgMgr.GenerateCache()
 			if err != nil {
-				errors = append(errors, PackageError{Package: processedPackages[i], Err: err})
-				return ""
+				slog.Error("error generating package database cache", "err", err)
+				os.Exit(1)
 			}
 
-			return md
-		}))
+			// retry after generating the cache
+			pkgDb, err = db.NewPackageDatabase(cachePath)
+		}
 
-	for _, pkgErr := range errors {
-		slog.Error("error getting package metadata", "package", pkgErr.Package.Name, "err", pkgErr.Err)
+		if err != nil {
+			slog.Error("error validating package database", "err", err)
+			os.Exit(1)
+		}
 	}
 
+	packages, err := pkgDb.GetPackages(filter)
 	if err != nil {
-		slog.Error("error finding package", "err", err)
+		slog.Error("error getting packages", "err", err)
 		os.Exit(1)
 	}
-	fmt.Printf("selected: %v\n", idx)
+
+	// fmt.Println(packages)
+	// fmt.Println(finder)
+
+	err = finder.RunFinder(packages)
+	if err != nil {
+		slog.Error("error running fzf", "err", err)
+		os.Exit(1)
+	}
+
+	// type PackageError struct {
+	// 	Package Package
+	// 	Err     error
+	// }
+
+	// var errors []PackageError
+
+	// idx, err := fuzzyfinder.FindMulti(
+	// 	processedPackages,
+	// 	func(i int) string {
+	// 		name := processedPackages[i].Name
+
+	// 		if processedPackages[i].Installed {
+	// 			name += " (installed)"
+	// 		}
+	// 		return name
+	// 	},
+	// 	fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+	// 		// if there aren't any packages, don't try to show a preview
+	// 		if i == -1 {
+	// 			return ""
+	// 		}
+
+	// 		md, err := getPackageMetadata(processedPackages[i], w)
+	// 		if err != nil {
+	// 			errors = append(errors, PackageError{Package: processedPackages[i], Err: err})
+	// 			return ""
+	// 		}
+
+	// 		return md
+	// 	}))
+
+	// for _, pkgErr := range errors {
+	// 	slog.Error("error getting package metadata", "package", pkgErr.Package.Name, "err", pkgErr.Err)
+	// }
+
+	// if err != nil {
+	// 	slog.Error("error finding package", "err", err)
+	// 	os.Exit(1)
+	// }
+	// fmt.Printf("selected: %v\n", idx)
 }
