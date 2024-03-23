@@ -52,7 +52,7 @@ func main() {
 
 	pkgMgr := manager.NewDnf(escalationBinary, dnfBinary)
 	pkgDb := initPackageDatabase(pkgMgr, cachePath)
-	finder := finder.NewFinder(fzfBinary)
+	finder := finder.NewFzf(fzfBinary)
 
 	packages, err := pkgDb.GetPackages(filter)
 	if err != nil {
