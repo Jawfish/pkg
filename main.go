@@ -1,13 +1,12 @@
 package main
 
 import (
-	"dnfzf/db"
-	"dnfzf/dnf"
-	"dnfzf/finder"
-	"dnfzf/sys"
 	"flag"
 	"log/slog"
 	"os"
+	"pkg/bin"
+	"pkg/finder"
+	"pkg/manager"
 	"strings"
 )
 
@@ -32,34 +31,28 @@ func main() {
 
 	initLogger(verbose)
 
-	dnfBinary, fzfBinary, escalationBinary, err := sys.GetBinaries()
+	binLocator := bin.OSBinaryLocator{}
+	dnfBinary, err := binLocator.GetPreferredBinary(bin.DNF, bin.DNF5)
 	if err != nil {
-		slog.Error("error getting binary", "err", err)
+		slog.Error("error getting dnf binary", "err", err)
 		os.Exit(1)
 	}
 
-	pkgMgr := dnf.NewPackageManager(escalationBinary, dnfBinary)
-	pkgDb, err := db.NewPackageDatabase(cachePath)
-	finder := finder.NewFinder(fzfBinary)
-
+	fzfBinary, err := binLocator.GetPreferredBinary(bin.FZF)
 	if err != nil {
-		// if the cache couldn't be validated, try to generate it
-		if _, ok := err.(*db.ErrCacheNotFound); ok {
-			err := pkgMgr.GenerateCache()
-			if err != nil {
-				slog.Error("error generating package database cache", "err", err)
-				os.Exit(1)
-			}
-
-			// retry after generating the cache
-			pkgDb, err = db.NewPackageDatabase(cachePath)
-		}
-
-		if err != nil {
-			slog.Error("error validating package database", "err", err)
-			os.Exit(1)
-		}
+		slog.Error("error getting fzf binary", "err", err)
+		os.Exit(1)
 	}
+
+	escalationBinary, err := binLocator.GetPreferredBinary(bin.Pkexec, bin.Doas, bin.Sudo)
+	if err != nil {
+		slog.Error("error getting escalation binary", "err", err)
+		os.Exit(1)
+	}
+
+	pkgMgr := manager.NewDnf(escalationBinary, dnfBinary)
+	pkgDb := initPackageDatabase(pkgMgr, cachePath)
+	finder := finder.NewFinder(fzfBinary)
 
 	packages, err := pkgDb.GetPackages(filter)
 	if err != nil {
@@ -70,7 +63,14 @@ func main() {
 	// fmt.Println(packages)
 	// fmt.Println(finder)
 
-	err = finder.RunFinder(packages)
+	// makeCacheService, err := bin.NewUnit("dnf-makecache.timer")
+	// if err != nil {
+	// 	slog.Error("error finding unit", "unit", "dnf-makecache.service", "err", err)
+	// 	os.Exit(1)
+	// }
+	// makeCacheService = makeCacheService
+
+	err = finder.Run(packages)
 	if err != nil {
 		slog.Error("error running fzf", "err", err)
 		os.Exit(1)

@@ -8,7 +8,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"dnfzf/pkg"
+	"pkg/manager"
 )
 
 type PackageDatabase struct {
@@ -99,19 +99,19 @@ func (pdb *PackageDatabase) validateSchema() error {
 // GetPackages returns a list of packages from the package database cache. The filter
 // argument is used to filter the list of packages by name. Both installed and available
 // packages are returned.
-func (pdb *PackageDatabase) GetPackages(filter string) ([]pkg.Package, error) {
-	rawAvailable, err := pdb.getRawPackages(pkg.Installed, filter)
+func (pdb *PackageDatabase) GetPackages(filter string) ([]manager.Package, error) {
+	rawAvailable, err := pdb.getRawPackages(manager.Installed, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	rawInstalled, err := pdb.getRawPackages(pkg.Installed, filter)
+	rawInstalled, err := pdb.getRawPackages(manager.Installed, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	available := pdb.processRawPackages(rawAvailable, pkg.Available)
-	installed := pdb.processRawPackages(rawInstalled, pkg.Installed)
+	available := pdb.processRawPackages(rawAvailable, manager.Available)
+	installed := pdb.processRawPackages(rawInstalled, manager.Installed)
 
 	return append(available, installed...), nil
 }
@@ -119,7 +119,7 @@ func (pdb *PackageDatabase) GetPackages(filter string) ([]pkg.Package, error) {
 // getRawPackages returns a list of packages from the dnf package database cache
 // at the given path, either installed or available packages, depending on the pkgType
 // argument.
-func (pdb *PackageDatabase) getRawPackages(pkgType pkg.PackageType, filter string) ([]string, error) {
+func (pdb *PackageDatabase) getRawPackages(pkgType manager.Status, filter string) ([]string, error) {
 	db, err := sql.Open("sqlite3", pdb.Path)
 	if err != nil {
 		return nil, &ErrOpeningCacheDatabase{Err: err}
@@ -153,11 +153,11 @@ func (pdb *PackageDatabase) getRawPackages(pkgType pkg.PackageType, filter strin
 
 // processRawPackages processes the raw list of packages queried from the dnf package
 // database and returns a list of Package structs.
-func (pdb *PackageDatabase) processRawPackages(raw []string, pkgType pkg.PackageType) []pkg.Package {
-	var packages []pkg.Package
+func (pdb *PackageDatabase) processRawPackages(raw []string, pkgType manager.Status) []manager.Package {
+	var packages []manager.Package
 
 	for _, pkgName := range raw {
-		packages = append(packages, pkg.NewPackage(pkgName, pkgType))
+		packages = append(packages, manager.NewPackage(pkgName, pkgType))
 	}
 	return packages
 }

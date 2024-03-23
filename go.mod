@@ -1,4 +1,4 @@
-module dnfzf
+module pkg
 
 go 1.21.7
 
