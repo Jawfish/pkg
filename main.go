@@ -32,7 +32,7 @@ func main() {
 	initLogger(verbose)
 
 	binLocator := bin.OSBinaryLocator{}
-	dnfBinary, err := binLocator.GetPreferredBinary(bin.DNF, bin.DNF5)
+	dnfBinary, err := binLocator.GetPreferredBinary(bin.DNF5, bin.DNF)
 	if err != nil {
 		slog.Error("error getting dnf binary", "err", err)
 		os.Exit(1)
@@ -44,37 +44,57 @@ func main() {
 		os.Exit(1)
 	}
 
-	escalationBinary, err := binLocator.GetPreferredBinary(bin.Pkexec, bin.Doas, bin.Sudo)
+	rootBinary, err := binLocator.GetPreferredBinary(bin.Doas, bin.Sudo, bin.Pkexec)
 	if err != nil {
 		slog.Error("error getting escalation binary", "err", err)
 		os.Exit(1)
 	}
 
-	pkgMgr := manager.NewDnf(escalationBinary, dnfBinary)
+	pkgMgr := manager.NewDnf(rootBinary, dnfBinary)
 	pkgDb := initPackageDatabase(pkgMgr, cachePath)
 	finder := finder.NewFzf(fzfBinary)
 
-	packages, err := pkgDb.GetPackages(filter)
+	queriedPackages, err := pkgDb.GetPackages(filter)
 	if err != nil {
 		slog.Error("error getting packages", "err", err)
 		os.Exit(1)
 	}
 
-	// fmt.Println(packages)
-	// fmt.Println(finder)
-
-	// makeCacheService, err := bin.NewUnit("dnf-makecache.timer")
-	// if err != nil {
-	// 	slog.Error("error finding unit", "unit", "dnf-makecache.service", "err", err)
-	// 	os.Exit(1)
-	// }
-	// makeCacheService = makeCacheService
-
-	err = finder.Run(packages)
+	selectedPackages, err := finder.SelectPackages(queriedPackages)
 	if err != nil {
 		slog.Error("error running fzf", "err", err)
 		os.Exit(1)
 	}
+
+	packagesToRemove := []manager.Package{}
+	for _, pkg := range selectedPackages {
+		if !pkg.Installed {
+			continue
+		}
+		packagesToRemove = append(packagesToRemove, pkg)
+	}
+
+	packagesToInstall := []manager.Package{}
+	for _, pkg := range selectedPackages {
+		if pkg.Installed {
+			continue
+		}
+		packagesToInstall = append(packagesToInstall, pkg)
+	}
+
+	err = pkgMgr.Remove(packagesToRemove)
+	if err != nil {
+		slog.Error("error removing packages", "err", err)
+		os.Exit(1)
+	}
+
+	err = pkgMgr.Install(packagesToInstall)
+	if err != nil {
+		slog.Error("error installing packages", "err", err)
+		os.Exit(1)
+	}
+
+	pkgMgr.GenerateCache()
 
 	// type PackageError struct {
 	// 	Package Package

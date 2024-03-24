@@ -7,8 +7,8 @@ import (
 	"pkg/manager"
 )
 
-func initPackageDatabase(pkgMgr manager.PackageManager, cachePath string) *db.PackageDatabase {
-	pkgDb, err := db.NewPackageDatabase(cachePath)
+func initPackageDatabase(pkgMgr manager.PackageManager, cachePath string) *db.DnfDatabase {
+	pkgDb, err := db.NewDnfDatabase(cachePath)
 
 	// if the cache couldn't be validated, try to generate it
 	if _, ok := err.(*db.ErrCacheNotFound); ok {
@@ -20,7 +20,7 @@ func initPackageDatabase(pkgMgr manager.PackageManager, cachePath string) *db.Pa
 		}
 
 		// retry after generating the cache
-		pkgDb, err = db.NewPackageDatabase(cachePath)
+		pkgDb, err = db.NewDnfDatabase(cachePath)
 		if err != nil {
 			slog.Error("error validating package database", "err", err)
 			os.Exit(1)

@@ -1,21 +1,14 @@
 package manager
 
-type Status string
-
-const (
-	Installed Status = "installed"
-	Available Status = "available"
-)
-
 type Package struct {
 	Name      string
 	Installed bool
 }
 
-func NewPackage(pkg string, status Status) Package {
+func NewPackage(pkg string, installed bool) Package {
 	return Package{
 		Name:      pkg,
-		Installed: status == Installed,
+		Installed: installed,
 	}
 }
 
