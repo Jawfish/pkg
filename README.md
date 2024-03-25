@@ -1,7 +1,5 @@
 # pkg
 
-## What is it?
-
 `pkg` is a CLI tool for improving the user experience when performing the most common package operations by providing an [fzf](https://github.com/junegunn/fzf)-backed interface for discovering, installing, and removing packages. It currently supports `dnf`.
 
 ## Features
@@ -30,38 +28,50 @@ When multiple packages are selected and those packages have mixed states (e.g. s
 
 ## Why use this over a simple bash script?
 
-This project originated as a bash script, but I decided to rewrite it in Go to have a more robust starting point to build from so that I could eventually support every package manager that I use. I also wanted to have a single, easy-to-redistribute binary, with as few installation steps and depdendencies as possible, hence the choice of Go over Python.
+This project originated as a bash script, but it was rewritten in Go to have a better starting point for eventually supporting additional package managers. I also wanted to have a single, easy-to-redistribute binary, with as few installation steps and depdendencies as possible, hence the choice of Go over, say, Python.
 
-While the current version is not much more than a simple wrapper, using Go opens up some possibilities that could be nice to have in the future. For example, taking advantage of goroutines to retrieve package information and populate the package list concurrently, integrating [go-fuzzyfinder](https://github.com/ktr0731/go-fuzzyfinder) to remove the dependency on `fzf`, or using the libsolv library to query package metadata directly for improved responsiveness.
+While the current version is little more than a wrapper, the choice of Go opens up some possibilities that could be nice to have in the future. For example, taking advantage of goroutines and channels to retrieve package information and populate the package list concurrently, integrating [go-fuzzyfinder](https://github.com/ktr0731/go-fuzzyfinder) to remove the dependency on `fzf`, and using the libsolv library to query package metadata directly.
 
 Here is the original script if you would prefer to use that or modify it for your own purposes:
 
 ```bash
+#!/bin/bash
+
 pkg() {
- local search_term="${1}"
+	local search_term="${1}"
 
- if [[ -z "${search_term}" ]]; then
-  search_term=''
- fi
+	if [[ -z "${search_term}" ]]; then
+		search_term=''
+	fi
 
- packages=$(
-  fzf \
-   --query="${search_term}" \
-   --multi \
-   --cycle \
-   --preview 'dnf5 -C info {} | tail -n +4 | grep -v -E "^(Epoch|Source|Architecture|License|Vendor)"' \
-   --with-nth '1,2' \
-   < <(
-    sqlite3 /var/cache/dnf/packages.db "SELECT available.pkg || CASE WHEN installed.pkg IS NULL THEN '' ELSE ' (installed)' END FROM available LEFT JOIN installed ON available.pkg = installed.pkg WHERE (available.pkg LIKE '%$(uname -m)%' OR available.pkg LIKE '%.noarch%') AND available.pkg LIKE '%${search_term}%'"
-   )
- )
+	packages=$(
+		fzf \
+			--query="${search_term}" \
+			--multi \
+			--cycle \
+			--preview 'dnf5 -C info {} | \
+			tail -n +4 | \
+			grep -v -E "^(Epoch|Source|Architecture|License|Vendor)"' \
+			--with-nth '1,2' \
+			< <(
+				sqlite3 /var/cache/dnf/packages.db \
+					"SELECT available.pkg || \
+					CASE WHEN installed.pkg IS NULL THEN '' ELSE ' (installed)' END \
+					FROM available \
+					LEFT JOIN installed ON available.pkg = installed.pkg \
+					WHERE (available.pkg LIKE '%$(uname -m)%' OR available.pkg LIKE '%.noarch%') \
+					AND available.pkg LIKE '%${search_term}%'"
+			)
+	)
 
- if [[ "${EUID}" -ne 0 ]]; then
-  sudo xargs -r dnf5 install -y <<<"${packages}"
- else
-  xargs -r dnf5 install -y <<<"${packages}"
- fi
+	if [[ "${EUID}" -ne 0 ]]; then
+		sudo xargs -r dnf5 install -y <<<"${packages}"
+	else
+		xargs -r dnf5 install -y <<<"${packages}"
+	fi
 }
+
+pkg "$@"
 ```
 
 ## Roadmap
