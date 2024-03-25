@@ -1,4 +1,4 @@
-package db
+package getter
 
 import (
 	"database/sql"
@@ -12,7 +12,7 @@ type DnfDatabase struct {
 	Path string
 }
 
-func NewDnfDatabase(path string) (*DnfDatabase, error) {
+func NewDnfGetter(path string) (*DnfDatabase, error) {
 	pdb := &DnfDatabase{Path: path}
 	err := pdb.validate()
 
@@ -93,40 +93,41 @@ func (pdb *DnfDatabase) validateSchema() error {
 	return nil
 }
 
-// GetPackages returns a list of packages from the package database cache. The filter
+// GetPackages returns a list of packages from the package database cache. The query
 // argument is used to filter the list of packages by name. Both installed and available
 // packages are returned.
-func (pdb *DnfDatabase) GetPackages(filter string) ([]manager.Package, error) {
-	available, err := pdb.getRawPackages("available", filter)
-	if err != nil {
-		return nil, fmt.Errorf("error getting available packages: %w", err)
-	}
-	installed, err := pdb.getRawPackages("installed", filter)
-	if err != nil {
-		return nil, fmt.Errorf("error getting installed packages: %w", err)
-	}
-
-	// create a slice and a corresponding map of package names to their index in the
+func (pdb *DnfDatabase) GetPackages(query Query, queryType QueryType) ([]manager.Package, error) {
+	// use a slice and a corresponding map of package names to their index in the
 	// slice so that we can return a slice without having to flatten a map
 	pkgMap := make(map[string]int)
-	pkgs := make([]manager.Package, 0, len(available))
+	pkgs := make([]manager.Package, 0)
 
-	// add all available packages to the slice
-	for _, pkg := range available {
-		p := manager.NewPackage(pkg, false)
-		pkgMap[p.Name] = len(pkgs)
-		pkgs = append(pkgs, p)
+	packageTypes := []string{}
+	if queryType == Available || queryType == All {
+		packageTypes = append(packageTypes, "available")
+	}
+	if queryType == Installed || queryType == All {
+		packageTypes = append(packageTypes, "installed")
 	}
 
-	// packages from the "installed" table that are already present in the slice from
-	// the "available" table should be marked as installed
-	for _, pkg := range installed {
-		if i, ok := pkgMap[pkg]; ok {
-			pkgs[i].Installed = true
-		} else {
-			p := manager.NewPackage(pkg, true)
-			pkgMap[p.Name] = len(pkgs)
-			pkgs = append(pkgs, p)
+	for _, packageType := range packageTypes {
+		rawPackages, err := pdb.getRawPackages(packageType, query)
+		if err != nil {
+			return nil, fmt.Errorf("error getting %s packages: %w", packageType, err)
+		}
+
+		for _, pkg := range rawPackages {
+			// if the package is installed and already in the slice,
+			// update the installed field
+			isInstalled := packageType == "installed"
+			if i, ok := pkgMap[pkg]; ok {
+				pkgs[i].Installed = isInstalled
+			} else {
+				// otherwise, we haven't seen this package yet, so add it to the slice
+				p := manager.NewPackage(pkg, isInstalled)
+				pkgMap[p.Name] = len(pkgs)
+				pkgs = append(pkgs, p)
+			}
 		}
 	}
 
@@ -135,7 +136,7 @@ func (pdb *DnfDatabase) GetPackages(filter string) ([]manager.Package, error) {
 
 // getRawPackages returns a list of packages from the dnf package database cache for
 // the given table (installed or available).
-func (pdb *DnfDatabase) getRawPackages(table string, filter string) ([]string, error) {
+func (pdb *DnfDatabase) getRawPackages(table string, filter Query) ([]string, error) {
 
 	db, err := sql.Open("sqlite3", pdb.Path)
 	if err != nil {

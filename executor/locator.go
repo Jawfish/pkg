@@ -1,4 +1,4 @@
-package bin
+package executor
 
 import (
 	"log/slog"
@@ -19,7 +19,7 @@ func (r *OSBinaryLocator) findBinary(name string) (string, error) {
 	return bin, err
 }
 
-func (s *OSBinaryLocator) GetPreferredBinary(binaries ...BinaryName) (bin Executor, err error) {
+func (s *OSBinaryLocator) GetExecutable(binaries ...BinaryName) (bin *Executable, err error) {
 	for _, binary := range binaries {
 		b := string(binary)
 		found, err := s.findBinary(b)

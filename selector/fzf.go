@@ -1,4 +1,4 @@
-package finder
+package selector
 
 import (
 	"bytes"
@@ -6,26 +6,26 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"pkg/bin"
+	"pkg/executor"
 	"pkg/manager"
 	"strings"
 )
 
 type Fzf struct {
-	bin       bin.Executor
-	delimiter string
-	stdIn     bytes.Buffer
+	executable *executor.Executable
+	delimiter  string
+	input      bytes.Buffer
 }
 
-func NewFzf(fzfBinary bin.Executor) *Fzf {
-	slog.Debug("creating new finder", "binary", fzfBinary.Name())
+func NewFzf(fzfBinary *executor.Executable) *Fzf {
+	slog.Debug("creating new finder", "binary", fzfBinary.Name)
 
 	return &Fzf{
-		bin: fzfBinary,
+		executable: fzfBinary,
 		// non-whitespace characters show up for some reason, and space is too useful
 		// to use as a delimiter, so use ‎ (invisible space character)
 		delimiter: "‎",
-		stdIn:     bytes.Buffer{},
+		input:     bytes.Buffer{},
 	}
 }
 
@@ -54,13 +54,19 @@ func (f *Fzf) getPackagePreview(p *manager.Package, width int) string {
 }
 
 func (f *Fzf) SelectPackages(packages []manager.Package) ([]manager.Package, error) {
-	slog.Debug("running finder", "binary", f.bin.Name())
+	slog.Debug("running finder", "binary", f.executable.Name)
 
 	pkgStr := f.prepareInput(packages)
 
 	args := []string{"--multi", "--with-nth", "1", "--delimiter", f.delimiter, "--tiebreak=length", "--ansi"}
 
-	err := f.bin.Execute(strings.NewReader(pkgStr), &f.stdIn, os.Stderr, args...)
+	execIo := executor.ExecutorIo{
+		Stdin:  strings.NewReader(pkgStr),
+		Stdout: &f.input,
+		Stderr: os.Stderr,
+	}
+
+	err := f.executable.Execute(execIo, args...)
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if exitError.ExitCode() == 130 {
@@ -71,7 +77,7 @@ func (f *Fzf) SelectPackages(packages []manager.Package) ([]manager.Package, err
 		return nil, err
 	}
 
-	slog.Debug("finder output", "output", f.stdIn.String())
+	slog.Debug("finder output", "output", f.input.String())
 
 	selectedPackages, err := f.parseOutput(packages)
 	if err != nil {
@@ -101,8 +107,8 @@ func (f *Fzf) prepareInput(packages []manager.Package) string {
 }
 
 func (f *Fzf) parseOutput(packages []manager.Package) ([]manager.Package, error) {
-	slog.Debug("parsing output from finder", "output", f.stdIn.String())
-	selectedLines := strings.Split(strings.TrimSpace(f.stdIn.String()), "\n")
+	slog.Debug("parsing output from finder", "output", f.input.String())
+	selectedLines := strings.Split(strings.TrimSpace(f.input.String()), "\n")
 
 	var selection []manager.Package
 

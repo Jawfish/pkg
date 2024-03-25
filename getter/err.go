@@ -1,4 +1,4 @@
-package db
+package getter
 
 import "fmt"
 

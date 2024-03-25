@@ -4,70 +4,87 @@ import (
 	"flag"
 	"log/slog"
 	"os"
-	"pkg/bin"
-	"pkg/finder"
+	"pkg/executor"
+	"pkg/getter"
 	"pkg/manager"
+	"pkg/selector"
 	"strings"
 )
 
-func setFlags(noConfirm *bool, cachePath *string, verbose *bool) {
-	flag.BoolVar(noConfirm, "y", false, "skip the confirmation prompt")
-	flag.StringVar(cachePath, "c", "/var/cache/dnf/packages.db", "the path to the DNF cache database")
-	flag.BoolVar(verbose, "v", false, "show verbose output")
+func setFlags() (noConfirm bool, cachePath string, verbose bool) {
+	flag.BoolVar(&noConfirm, "y", false, "skip the confirmation prompt")
+	flag.StringVar(&cachePath, "c", "/var/cache/dnf/packages.db", "the path to the DNF cache database")
+	flag.BoolVar(&verbose, "v", false, "show verbose output")
 
 	flag.Parse()
+
+	return noConfirm, cachePath, verbose
+}
+
+func managePackages(mgr manager.PackageManager, packagesToRemove, packagesToInstall []manager.Package) {
+	err := mgr.Remove(packagesToRemove)
+	if err != nil {
+		slog.Error("error removing packages", "err", err)
+		os.Exit(1)
+	}
+
+	err = mgr.Install(packagesToInstall)
+	if err != nil {
+		slog.Error("error installing packages", "err", err)
+		os.Exit(1)
+	}
 }
 
 func main() {
-	var (
-		noConfirm bool
-		cachePath string
-		verbose   bool
-	)
-	setFlags(&noConfirm, &cachePath, &verbose)
+	noConfirm, cachePath, verbose := setFlags()
 
 	filters := flag.Args()
-	filter := strings.Join(filters, " ")
+	filter := getter.Query(strings.Join(filters, " "))
 
 	initLogger(verbose)
 
-	binLocator := bin.OSBinaryLocator{}
-	dnfBinary, err := binLocator.GetPreferredBinary(bin.DNF5, bin.DNF)
+	binLocator := executor.OSBinaryLocator{}
+	dnfBinary, err := binLocator.GetExecutable(executor.DNF)
 	if err != nil {
 		slog.Error("error getting dnf binary", "err", err)
 		os.Exit(1)
 	}
 
-	fzfBinary, err := binLocator.GetPreferredBinary(bin.FZF)
+	fzfBinary, err := binLocator.GetExecutable(executor.FZF)
 	if err != nil {
 		slog.Error("error getting fzf binary", "err", err)
 		os.Exit(1)
 	}
 
-	rootBinary, err := binLocator.GetPreferredBinary(bin.Doas, bin.Sudo, bin.Pkexec)
+	rootBinary, err := binLocator.GetExecutable(executor.Doas, executor.Sudo, executor.Pkexec)
 	if err != nil {
 		slog.Error("error getting escalation binary", "err", err)
 		os.Exit(1)
 	}
 
-	pkgMgr := manager.NewDnf(rootBinary, dnfBinary)
-	pkgDb := initPackageDatabase(pkgMgr, cachePath)
-	finder := finder.NewFzf(fzfBinary)
+	pkgGetter, err := getter.NewDnfGetter(cachePath)
+	if err != nil {
+		slog.Error("error getting dnf package cache database", "err", err)
+		os.Exit(1)
+	}
 
-	queriedPackages, err := pkgDb.GetPackages(filter)
+	pkgManager := manager.NewDnf(rootBinary, dnfBinary, noConfirm)
+
+	queriedPkgs, err := pkgGetter.GetPackages(filter, getter.All)
 	if err != nil {
 		slog.Error("error getting packages", "err", err)
 		os.Exit(1)
 	}
 
-	selectedPackages, err := finder.SelectPackages(queriedPackages)
+	pkgSelector := selector.NewFzf(fzfBinary)
+	selectedPkgs, err := pkgSelector.SelectPackages(queriedPkgs)
 	if err != nil {
 		slog.Error("error running fzf", "err", err)
 		os.Exit(1)
 	}
 
 	packagesToRemove := []manager.Package{}
-	for _, pkg := range selectedPackages {
+	for _, pkg := range selectedPkgs {
 		if !pkg.Installed {
 			continue
 		}
@@ -75,66 +92,13 @@ func main() {
 	}
 
 	packagesToInstall := []manager.Package{}
-	for _, pkg := range selectedPackages {
+	for _, pkg := range selectedPkgs {
 		if pkg.Installed {
 			continue
 		}
 		packagesToInstall = append(packagesToInstall, pkg)
 	}
 
-	err = pkgMgr.Remove(packagesToRemove)
-	if err != nil {
-		slog.Error("error removing packages", "err", err)
-		os.Exit(1)
-	}
+	managePackages(pkgManager, packagesToRemove, packagesToInstall)
 
-	err = pkgMgr.Install(packagesToInstall)
-	if err != nil {
-		slog.Error("error installing packages", "err", err)
-		os.Exit(1)
-	}
-
-	pkgMgr.GenerateCache()
-
-	// type PackageError struct {
-	// 	Package Package
-	// 	Err     error
-	// }
-
-	// var errors []PackageError
-
-	// idx, err := fuzzyfinder.FindMulti(
-	// 	processedPackages,
-	// 	func(i int) string {
-	// 		name := processedPackages[i].Name
-
-	// 		if processedPackages[i].Installed {
-	// 			name += " (installed)"
-	// 		}
-	// 		return name
-	// 	},
-	// 	fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
-	// 		// if there aren't any packages, don't try to show a preview
-	// 		if i == -1 {
-	// 			return ""
-	// 		}
-
-	// 		md, err := getPackageMetadata(processedPackages[i], w)
-	// 		if err != nil {
-	// 			errors = append(errors, PackageError{Package: processedPackages[i], Err: err})
-	// 			return ""
-	// 		}
-
-	// 		return md
-	// 	}))
-
-	// for _, pkgErr := range errors {
-	// 	slog.Error("error getting package metadata", "package", pkgErr.Package.Name, "err", pkgErr.Err)
-	// }
-
-	// if err != nil {
-	// 	slog.Error("error finding package", "err", err)
-	// 	os.Exit(1)
-	// }
-	// fmt.Printf("selected: %v\n", idx)
 }

@@ -1,4 +1,4 @@
-package finder
+package selector
 
 import (
 	"pkg/manager"

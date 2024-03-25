@@ -1,8 +1,18 @@
 package manager
 
+type PackageInstaller interface {
+	Install(packages []Package) error
+}
+
+type PackageRemover interface {
+	Remove(packages []Package) error
+}
+
 type PackageManager interface {
-	GenerateCache() error
-	Install([]Package) error
-	Remove([]Package) error
+	PackageInstaller
+	PackageRemover
+}
+
+type MetadataGetter interface {
 	GetMetadata(Package) (Metadata, error)
 }

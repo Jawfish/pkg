@@ -1,43 +1,26 @@
 package manager
 
 import (
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 
-	"pkg/bin"
+	"pkg/executor"
 )
 
 type Dnf struct {
-	bin    bin.Executor
-	root   bin.Executor
-	cmd    string
-	stdOut io.Writer
-	stdErr io.Writer
+	dnfExecutable  *executor.Executable
+	rootExecutable *executor.Executable
+	nonInteractive bool
 }
 
-func NewDnf(root bin.Executor, bin bin.Executor) *Dnf {
+func NewDnf(rootExecutable *executor.Executable, executable *executor.Executable, nonInteractive bool) *Dnf {
 	return &Dnf{
-		bin:    bin,
-		root:   root,
-		cmd:    string(bin.Name()),
-		stdOut: os.Stdout,
-		stdErr: os.Stderr,
+		dnfExecutable:  executable,
+		rootExecutable: rootExecutable,
+		nonInteractive: nonInteractive,
 	}
-}
-
-func (dnf *Dnf) GenerateCache() error {
-	slog.Debug("generating cache")
-
-	err := dnf.root.Execute(nil, dnf.stdOut, dnf.stdErr, dnf.cmd, "makecache")
-	if err != nil {
-		return &ErrGeneratingCache{Err: err}
-	}
-
-	slog.Debug("cache generated")
-	return nil
 }
 
 func (dnf *Dnf) Install(packages []Package) error {
@@ -48,12 +31,23 @@ func (dnf *Dnf) Install(packages []Package) error {
 	}
 
 	var pkgNames []string
-
 	for _, pkg := range packages {
 		pkgNames = append(pkgNames, pkg.Name)
 	}
 
-	err := dnf.root.Execute(os.Stdin, dnf.stdOut, dnf.stdErr, dnf.cmd, "install", strings.Join(pkgNames, " "))
+	args := []string{string(dnf.dnfExecutable.Name), "install"}
+	args = append(args, pkgNames...)
+	if dnf.nonInteractive {
+		args = append(args, "-y")
+	}
+
+	execIo := executor.ExecutorIo{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+
+	err := dnf.rootExecutable.Execute(execIo, args...)
 	if err != nil {
 		return err
 	}
@@ -69,12 +63,23 @@ func (dnf *Dnf) Remove(packages []Package) error {
 	}
 
 	var pkgNames []string
-
 	for _, pkg := range packages {
 		pkgNames = append(pkgNames, dnf.getCleanName(pkg))
 	}
 
-	err := dnf.root.Execute(os.Stdin, dnf.stdOut, dnf.stdErr, dnf.cmd, "remove", strings.Join(pkgNames, " "))
+	args := []string{string(dnf.dnfExecutable.Name), "remove"}
+	args = append(args, pkgNames...)
+	if dnf.nonInteractive {
+		args = append(args, "-y")
+	}
+
+	execIo := executor.ExecutorIo{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+
+	err := dnf.rootExecutable.Execute(execIo, args...)
 
 	if err != nil {
 		return err
