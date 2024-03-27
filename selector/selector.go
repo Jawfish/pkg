@@ -1,9 +1,10 @@
 package selector
 
 import (
+	"context"
 	"pkg/manager"
 )
 
 type Finder interface {
-	SelectPackages([]manager.Package) ([]manager.Package, error)
+	SelectPackages(context.Context, []manager.Package) ([]manager.Package, error)
 }

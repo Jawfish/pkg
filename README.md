@@ -28,7 +28,7 @@ When multiple packages are selected and those packages have mixed states (e.g. s
 
 ## Why use this over a simple bash script?
 
-This project originated as a bash script, but it was rewritten in Go to have a better starting point for eventually supporting additional package managers. I also wanted to have a single, easy-to-redistribute binary, with as few installation steps and depdendencies as possible, hence the choice of Go over, say, Python.
+This project originated as a bash script, but it was rewritten in Go to have a better starting point for eventually supporting additional package managers. I also wanted to have a single, easy-to-redistribute executable, with as few installation steps and depdendencies as possible, hence the choice of Go over, say, Python.
 
 While the current version is little more than a wrapper, the choice of Go opens up some possibilities that could be nice to have in the future. For example, taking advantage of goroutines and channels to retrieve package information and populate the package list concurrently, integrating [go-fuzzyfinder](https://github.com/ktr0731/go-fuzzyfinder) to remove the dependency on `fzf`, and using the libsolv library to query package metadata directly.
 
@@ -76,6 +76,7 @@ pkg "$@"
 
 ## Roadmap
 
+- [ ] package metadata in preview window
 - [ ] [improve responsiveness](https://github.com/Jawfish/pkg/issues/1)
 - [ ] support for zypper
 - [ ] support for apt

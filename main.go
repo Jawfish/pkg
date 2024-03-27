@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"log/slog"
 	"os"
-	"pkg/executor"
+	"pkg/executable"
 	"pkg/getter"
 	"pkg/manager"
 	"pkg/selector"
 	"strings"
+	"time"
 )
 
 func setFlags() (noConfirm bool, cachePath string, verbose bool) {
@@ -21,14 +24,14 @@ func setFlags() (noConfirm bool, cachePath string, verbose bool) {
 	return noConfirm, cachePath, verbose
 }
 
-func managePackages(mgr manager.PackageManager, packagesToRemove, packagesToInstall []manager.Package) {
-	err := mgr.Remove(packagesToRemove)
+func managePackages(ctx context.Context, mgr manager.PackageManager, packagesToRemove, packagesToInstall []manager.Package) {
+	err := mgr.Remove(ctx, packagesToRemove)
 	if err != nil {
 		slog.Error("error removing packages", "err", err)
 		os.Exit(1)
 	}
 
-	err = mgr.Install(packagesToInstall)
+	err = mgr.Install(ctx, packagesToInstall)
 	if err != nil {
 		slog.Error("error installing packages", "err", err)
 		os.Exit(1)
@@ -43,22 +46,22 @@ func main() {
 
 	initLogger(verbose)
 
-	binLocator := executor.OSBinaryLocator{}
-	dnfBinary, err := binLocator.GetExecutable(executor.DNF)
+	locator := executable.SystemExecLocator{}
+	dnf, err := locator.GetExecutable(executable.Dnf)
 	if err != nil {
-		slog.Error("error getting dnf binary", "err", err)
+		slog.Error("error getting dnf executable", "err", err)
 		os.Exit(1)
 	}
 
-	fzfBinary, err := binLocator.GetExecutable(executor.FZF)
+	fzfExecutable, err := locator.GetExecutable(executable.Fzf)
 	if err != nil {
-		slog.Error("error getting fzf binary", "err", err)
+		slog.Error("error getting fzf executable", "err", err)
 		os.Exit(1)
 	}
 
-	rootBinary, err := binLocator.GetExecutable(executor.Doas, executor.Sudo, executor.Pkexec)
+	rootExecutable, err := locator.GetExecutable(executable.Doas, executable.Sudo, executable.Pkexec)
 	if err != nil {
-		slog.Error("error getting escalation binary", "err", err)
+		slog.Error("error getting escalation executable", "err", err)
 		os.Exit(1)
 	}
 
@@ -68,19 +71,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	pkgManager := manager.NewDnf(rootBinary, dnfBinary, noConfirm)
+	ctx := context.Background()
 
-	queriedPkgs, err := pkgGetter.GetPackages(filter, getter.All)
+	pkgManager := manager.NewDnf(rootExecutable, dnf, noConfirm)
+	pkgManagerCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+	queriedPkgs, err := pkgGetter.GetPackages(pkgManagerCtx, filter, getter.All)
 	if err != nil {
-		slog.Error("error getting packages", "err", err)
-		os.Exit(1)
+		if errors.Is(err, context.DeadlineExceeded) {
+			slog.Error("getting packages timed out", "err", err)
+			os.Exit(1)
+		} else {
+			slog.Error("error getting packages", "err", err)
+			os.Exit(1)
+		}
 	}
 
-	pkgSelector := selector.NewFzf(fzfBinary)
-	selectedPkgs, err := pkgSelector.SelectPackages(queriedPkgs)
+	pkgSelector := selector.NewFzf(fzfExecutable)
+	selectedPkgs, err := pkgSelector.SelectPackages(ctx, queriedPkgs)
 	if err != nil {
-		slog.Error("error running fzf", "err", err)
-		os.Exit(1)
+		if exitError, ok := err.(*selector.ErrProcessInterrupted); ok && exitError.Code == 130 {
+			slog.Debug("Exiting gracefully")
+			os.Exit(0)
+		} else {
+			slog.Error("Error running fzf", "err", err)
+			os.Exit(1)
+		}
 	}
 
 	packagesToRemove := []manager.Package{}
@@ -99,6 +115,7 @@ func main() {
 		packagesToInstall = append(packagesToInstall, pkg)
 	}
 
-	managePackages(pkgManager, packagesToRemove, packagesToInstall)
+	managePackages(ctx, pkgManager, packagesToRemove, packagesToInstall)
 
+	slog.Debug("Everything seems to have gone well, exiting")
 }

@@ -1,11 +1,13 @@
 package manager
 
+import "context"
+
 type PackageInstaller interface {
-	Install(packages []Package) error
+	Install(context.Context, []Package) error
 }
 
 type PackageRemover interface {
-	Remove(packages []Package) error
+	Remove(context.Context, []Package) error
 }
 
 type PackageManager interface {
@@ -14,5 +16,5 @@ type PackageManager interface {
 }
 
 type MetadataGetter interface {
-	GetMetadata(Package) (Metadata, error)
+	GetMetadata(context.Context, Package) (Metadata, error)
 }

@@ -1,6 +1,7 @@
 package getter
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -34,27 +35,26 @@ func (pdb *DnfDatabase) validate() error {
 // validatePath returns nil if the dnf package database cache exists and is a valid
 // package database with the expected schema, otherwise an error is returned.
 func (pdb *DnfDatabase) validatePath() error {
-	slog.Debug("checking if cache exists")
+	slog.Debug("looking for cache", "path", pdb.Path)
 	_, err := os.Stat(pdb.Path)
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			slog.Warn("cache does not exist")
 			return &ErrCacheNotFound{Path: pdb.Path}
 
 		} else {
-			slog.Error("error checking if cache exists", "err", err)
 			return err
 		}
 	}
 
+	slog.Debug("cache found", "path", pdb.Path)
 	return nil
 }
 
 // validateSchema returns true if the dnf package database cache exists and is a valid
 // package database with the expected schema.
 func (pdb *DnfDatabase) validateSchema() error {
-	slog.Debug("checking if the cache has a valid schema")
+	slog.Debug("checking cache schema")
 
 	db, err := sql.Open("sqlite3", pdb.Path)
 	if err != nil {
@@ -89,14 +89,14 @@ func (pdb *DnfDatabase) validateSchema() error {
 		}
 	}
 
-	slog.Debug("cache has valid schema")
+	slog.Debug("cache schema valid")
 	return nil
 }
 
 // GetPackages returns a list of packages from the package database cache. The query
 // argument is used to filter the list of packages by name. Both installed and available
 // packages are returned.
-func (pdb *DnfDatabase) GetPackages(query Query, queryType QueryType) ([]manager.Package, error) {
+func (pdb *DnfDatabase) GetPackages(ctx context.Context, query Query, queryType QueryType) ([]manager.Package, error) {
 	// use a slice and a corresponding map of package names to their index in the
 	// slice so that we can return a slice without having to flatten a map
 	pkgMap := make(map[string]int)

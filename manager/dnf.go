@@ -1,30 +1,31 @@
 package manager
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 
-	"pkg/executor"
+	"pkg/executable"
 )
 
 type Dnf struct {
-	dnfExecutable  *executor.Executable
-	rootExecutable *executor.Executable
+	executable     string
+	rootExecutable string
 	nonInteractive bool
 }
 
-func NewDnf(rootExecutable *executor.Executable, executable *executor.Executable, nonInteractive bool) *Dnf {
+func NewDnf(rootExecutable executable.Executable, executable executable.Executable, nonInteractive bool) *Dnf {
 	return &Dnf{
-		dnfExecutable:  executable,
-		rootExecutable: rootExecutable,
+		executable:     string(executable),
+		rootExecutable: string(rootExecutable),
 		nonInteractive: nonInteractive,
 	}
 }
 
-func (dnf *Dnf) Install(packages []Package) error {
-	slog.Debug("installing multiple packages", "packages", packages)
+func (dnf *Dnf) Install(ctx context.Context, packages []Package) error {
+	slog.Debug("installing packages", "packages", packages)
 
 	if len(packages) == 0 {
 		return nil
@@ -35,27 +36,23 @@ func (dnf *Dnf) Install(packages []Package) error {
 		pkgNames = append(pkgNames, pkg.Name)
 	}
 
-	args := []string{string(dnf.dnfExecutable.Name), "install"}
+	args := []string{dnf.executable, "install"}
 	args = append(args, pkgNames...)
 	if dnf.nonInteractive {
 		args = append(args, "-y")
 	}
 
-	execIo := executor.ExecutorIo{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
+	cmd := exec.CommandContext(ctx, dnf.rootExecutable, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	err := dnf.rootExecutable.Execute(execIo, args...)
-	if err != nil {
-		return err
-	}
+	err := cmd.Run()
 
-	return nil
+	return err
 }
 
-func (dnf *Dnf) Remove(packages []Package) error {
+func (dnf *Dnf) Remove(ctx context.Context, packages []Package) error {
 	slog.Debug("removing packages", "packages", packages)
 
 	if len(packages) == 0 {
@@ -67,31 +64,26 @@ func (dnf *Dnf) Remove(packages []Package) error {
 		pkgNames = append(pkgNames, dnf.getCleanName(pkg))
 	}
 
-	args := []string{string(dnf.dnfExecutable.Name), "remove"}
+	args := []string{dnf.executable, "remove"}
 	args = append(args, pkgNames...)
 	if dnf.nonInteractive {
 		args = append(args, "-y")
 	}
 
-	execIo := executor.ExecutorIo{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
+	cmd := exec.CommandContext(ctx, dnf.rootExecutable, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	err := dnf.rootExecutable.Execute(execIo, args...)
+	err := cmd.Run()
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (dnf *Dnf) GetMetadata(pack Package) (Metadata, error) {
+func (dnf *Dnf) GetMetadata(ctx context.Context, pack Package) (Metadata, error) {
 	slog.Debug("getting metadata for package", "package", pack.Name)
 
-	out, err := exec.Command("info", pack.Name).Output()
+	out, err := exec.CommandContext(ctx, "info", pack.Name).Output()
 	if err != nil {
 		return Metadata{}, &ErrPkgMetadataNotFound{Pkg: pack, Err: err}
 	}

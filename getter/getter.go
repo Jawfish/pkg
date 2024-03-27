@@ -1,6 +1,8 @@
 package getter
 
 import (
+	"context"
+
 	_ "github.com/mattn/go-sqlite3"
 
 	"pkg/manager"
@@ -16,5 +18,5 @@ const (
 )
 
 type PackageGetter interface {
-	GetPackages(Query, QueryType) ([]manager.Package, error)
+	GetPackages(context.Context, Query, QueryType) ([]manager.Package, error)
 }
