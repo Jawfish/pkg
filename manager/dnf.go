@@ -6,20 +6,18 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	"pkg/executable"
 )
 
 type Dnf struct {
-	executable     string
-	rootExecutable string
+	runner         string
+	rootRunner     string
 	nonInteractive bool
 }
 
-func NewDnf(rootExecutable executable.Executable, executable executable.Executable, nonInteractive bool) *Dnf {
+func NewDnf(rootRunner string, runner string, nonInteractive bool) *Dnf {
 	return &Dnf{
-		executable:     string(executable),
-		rootExecutable: string(rootExecutable),
+		runner:         string(runner),
+		rootRunner:     string(rootRunner),
 		nonInteractive: nonInteractive,
 	}
 }
@@ -36,13 +34,13 @@ func (dnf *Dnf) Install(ctx context.Context, packages []Package) error {
 		pkgNames = append(pkgNames, pkg.Name)
 	}
 
-	args := []string{dnf.executable, "install"}
+	args := []string{dnf.runner, "install"}
 	args = append(args, pkgNames...)
 	if dnf.nonInteractive {
 		args = append(args, "-y")
 	}
 
-	cmd := exec.CommandContext(ctx, dnf.rootExecutable, args...)
+	cmd := exec.CommandContext(ctx, dnf.rootRunner, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -64,13 +62,13 @@ func (dnf *Dnf) Remove(ctx context.Context, packages []Package) error {
 		pkgNames = append(pkgNames, dnf.getCleanName(pkg))
 	}
 
-	args := []string{dnf.executable, "remove"}
+	args := []string{dnf.runner, "remove"}
 	args = append(args, pkgNames...)
 	if dnf.nonInteractive {
 		args = append(args, "-y")
 	}
 
-	cmd := exec.CommandContext(ctx, dnf.rootExecutable, args...)
+	cmd := exec.CommandContext(ctx, dnf.rootRunner, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

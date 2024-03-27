@@ -76,7 +76,6 @@ pkg "$@"
 
 ## Roadmap
 
-- [ ] package metadata in preview window
 - [ ] [improve responsiveness](https://github.com/Jawfish/pkg/issues/1)
 - [ ] support for zypper
 - [ ] support for apt

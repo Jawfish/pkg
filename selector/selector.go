@@ -5,6 +5,6 @@ import (
 	"pkg/manager"
 )
 
-type Finder interface {
+type Selector interface {
 	SelectPackages(context.Context, []manager.Package) ([]manager.Package, error)
 }

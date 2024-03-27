@@ -1,34 +1,32 @@
 package selector
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
-	"pkg/executable"
 	"pkg/manager"
 	"strings"
 )
 
 type Fzf struct {
-	executable string
-	delimiter  string
-	input      bytes.Buffer
+	runner    string
+	delimiter string
+	input     strings.Builder
 }
 
-func NewFzf(fzf executable.Executable) *Fzf {
+func NewFzf(fzf string) *Fzf {
 	return &Fzf{
-		executable: string(fzf),
-		delimiter:  " ",
-		input:      bytes.Buffer{},
+		runner:    string(fzf),
+		delimiter: " ",
+		input:     strings.Builder{},
 	}
 }
 
 func (f *Fzf) SelectPackages(ctx context.Context, packages []manager.Package) ([]manager.Package, error) {
-	slog.Debug("running finder", "executable", f.executable)
+	slog.Debug("running selector", "runner", f.runner)
 
 	pkgStr := f.prepareInput(packages)
 
@@ -36,13 +34,13 @@ func (f *Fzf) SelectPackages(ctx context.Context, packages []manager.Package) ([
 	// managers are added
 	args := []string{"--multi", "--with-nth", "1,2", "--delimiter", f.delimiter, "--tiebreak=length", "--ansi", "--preview", "dnf -C info {1} | tail -n +3"}
 
-	cmd := exec.CommandContext(ctx, f.executable, args...)
+	cmd := exec.CommandContext(ctx, f.runner, args...)
 	cmd.Stdin = strings.NewReader(pkgStr)
 	cmd.Stdout = &f.input
 	cmd.Stderr = os.Stderr
 
 	err := cmd.Run()
-	slog.Debug("finder output", "output", f.input.String())
+	slog.Debug("selector output", "output", f.input.String())
 
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
@@ -82,7 +80,7 @@ func (f *Fzf) prepareInput(packages []manager.Package) string {
 }
 
 func (f *Fzf) parseOutput(packages []manager.Package) ([]manager.Package, error) {
-	slog.Debug("parsing fzf output", "output", f.input.String())
+	slog.Debug("parsing fzf output", "output", f.input)
 	selectedLines := strings.Split(strings.TrimSpace(f.input.String()), "\n")
 
 	var selection []manager.Package
